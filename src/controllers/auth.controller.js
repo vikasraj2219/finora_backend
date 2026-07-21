@@ -7,6 +7,8 @@ const {
   signRefreshToken,
   verifyRefreshToken,
 } = require('../utils/jwt');
+const { seedDefaultCategories } = require('../services/category.service');
+const { createCashAccountForUser } = require('../services/cash.service');
 
 const issueTokens = async (user) => {
   const payload = { id: user._id, role: user.role };
@@ -43,6 +45,8 @@ const register = catchAsync(async (req, res) => {
     password,
     role: isFirstUser ? 'admin' : 'member',
   });
+
+  await Promise.all([seedDefaultCategories(user._id), createCashAccountForUser(user._id)]);
 
   const { accessToken, refreshToken } = await issueTokens(user);
 

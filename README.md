@@ -43,13 +43,16 @@ API runs at `http://localhost:5100/api/v1`.
 
 ## Build Phases
 
-- **Phase 1 (this delivery): Foundation** — project scaffold, DB connection, global error handling,
+- **Phase 1: Foundation** — project scaffold, DB connection, global error handling,
   ApiError/ApiResponse/catchAsync/pagination utilities, JWT auth (register/login/refresh/me/change-password,
   first user becomes admin), role-based auth middleware, and base Mongoose models for the core domain
   (BankAccount, UpiAccount, Category, Merchant, Transaction) so later phases can build directly on top.
-- **Phase 2 (next):** Bank & UPI account management (full CRUD), Category management, Cash tracking,
-  account balance recalculation service.
-- **Phase 3:** Transactions module — full CRUD, filters/search/pagination, transfers between accounts,
+- **Phase 2 (this delivery): Accounts & Categories** — Bank account CRUD (create/list/update/soft-delete,
+  toggle active, manual balance adjustment, recalculate-from-transactions), UPI account CRUD (with
+  bank-linking + ownership validation), Category CRUD with default categories auto-seeded on registration,
+  a per-user Cash ledger (view/adjust/recalculate), and the shared `balance.service.js` that both bank and
+  cash balances build on.
+- **Phase 3 (next):** Transactions module — full CRUD, filters/search/pagination, transfers between accounts,
   soft delete, audit logging.
 - **Phase 4:** Statement import (CSV/XLSX/PDF), duplicate detection, merchant mapping & auto-categorization.
 - **Phase 5:** Dashboard & Analytics endpoints (income/expense/savings, category & merchant breakdowns,
@@ -58,20 +61,58 @@ API runs at `http://localhost:5100/api/v1`.
 
 Each phase is delivered complete and working before moving to the next, per your instructions.
 
-## API Reference (Phase 1)
+## API Reference
 
-Base URL: `http://localhost:5100/api/v1`
+Base URL: `http://localhost:5100/api/v1`. All routes below (except register/login/refresh) require
+header: `Authorization: Bearer <accessToken>`
 
-| Method | Endpoint                | Access        | Description                              |
-| ------ | ------------------------ | ------------- | ----------------------------------------- |
-| POST   | `/auth/register`         | Public        | Register (first user in the system → admin) |
-| POST   | `/auth/login`             | Public        | Login, returns access + refresh token     |
-| POST   | `/auth/refresh`           | Public        | Get new access token from refresh token   |
-| GET    | `/auth/me`                | Authenticated | Current user profile                      |
-| PATCH  | `/auth/update-password`  | Authenticated | Change password                           |
-| POST   | `/auth/logout`            | Authenticated | Clear refresh token                       |
+### Auth (Phase 1)
+| Method | Endpoint                | Description                                  |
+| ------ | ------------------------ | --------------------------------------------- |
+| POST   | `/auth/register`         | Register (first user → admin, seeds default categories + cash ledger) |
+| POST   | `/auth/login`             | Login, returns access + refresh token         |
+| POST   | `/auth/refresh`           | Get new access token from refresh token       |
+| GET    | `/auth/me`                | Current user profile                          |
+| PATCH  | `/auth/update-password`  | Change password                               |
+| POST   | `/auth/logout`            | Clear refresh token                           |
 
-All protected routes require header: `Authorization: Bearer <accessToken>`
+### Bank Accounts (Phase 2)
+| Method | Endpoint                              | Description                          |
+| ------ | -------------------------------------- | ------------------------------------- |
+| POST   | `/bank-accounts`                       | Create                                |
+| GET    | `/bank-accounts`                       | List (paginated, `search`, `isActive`) |
+| GET    | `/bank-accounts/:id`                   | Get one                               |
+| PATCH  | `/bank-accounts/:id`                   | Update (name/type/nickname — not balance) |
+| PATCH  | `/bank-accounts/:id/adjust-balance`    | Manually adjust balance (`{ amount, note }`) |
+| POST   | `/bank-accounts/:id/recalculate`       | Recompute balance from transactions   |
+| PATCH  | `/bank-accounts/:id/toggle-active`     | Toggle active/inactive                |
+| DELETE | `/bank-accounts/:id`                   | Soft delete (blocked if UPI accounts are linked) |
+
+### UPI Accounts (Phase 2)
+| Method | Endpoint                        | Description                              |
+| ------ | --------------------------------- | ----------------------------------------- |
+| POST   | `/upi-accounts`                   | Create (optionally linked to a bank account) |
+| GET    | `/upi-accounts`                   | List (paginated, `provider`, `isActive`)  |
+| GET    | `/upi-accounts/:id`                | Get one                                   |
+| PATCH  | `/upi-accounts/:id`                | Update                                    |
+| PATCH  | `/upi-accounts/:id/toggle-active`  | Toggle active/inactive                    |
+| DELETE | `/upi-accounts/:id`                | Soft delete                               |
+
+### Categories (Phase 2)
+| Method | Endpoint          | Description                          |
+| ------ | ------------------ | -------------------------------------- |
+| POST   | `/categories`      | Create                                 |
+| GET    | `/categories`      | List (`type=income\|expense`)          |
+| GET    | `/categories/:id`  | Get one                                |
+| PATCH  | `/categories/:id`  | Update                                 |
+| DELETE | `/categories/:id`  | Soft delete                            |
+
+### Cash (Phase 2)
+| Method | Endpoint          | Description                                   |
+| ------ | ------------------ | ----------------------------------------------- |
+| GET    | `/cash`             | Get the user's cash-in-hand balance             |
+| PATCH  | `/cash/adjust`      | Adjust balance (`{ amount, note }`, negative to deduct) |
+| POST   | `/cash/recalculate` | Recompute from cash transactions (meaningful from Phase 3) |
 
 ## Quick Test
 ```
@@ -84,6 +125,14 @@ curl -X POST http://localhost:5100/api/v1/auth/login \
   -d '{"email":"admin@test.com","password":"Admin@1234"}'
 
 curl http://localhost:5100/api/v1/auth/me \
+  -H "Authorization: Bearer <accessToken>"
+
+curl -X POST http://localhost:5100/api/v1/bank-accounts \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{"bankName":"HDFC Bank","accountType":"savings","openingBalance":15000}'
+
+curl http://localhost:5100/api/v1/categories?type=expense \
   -H "Authorization: Bearer <accessToken>"
 ```
 
