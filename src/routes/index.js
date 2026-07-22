@@ -6,6 +6,8 @@ const categoryRoutes = require('./category.routes');
 const cashRoutes = require('./cash.routes');
 const transactionRoutes = require('./transaction.routes');
 const auditLogRoutes = require('./auditLog.routes');
+const merchantRoutes = require('./merchant.routes');
+const statementImportRoutes = require('./statementImport.routes');
 
 const router = express.Router();
 
@@ -16,8 +18,10 @@ router.use('/categories', categoryRoutes);
 router.use('/cash', cashRoutes);
 router.use('/transactions', transactionRoutes);
 router.use('/audit-logs', auditLogRoutes);
+router.use('/merchants', merchantRoutes);
+router.use('/imports', statementImportRoutes);
 
-// Phase 4+ routers (statement imports, dashboard analytics, reports, documents,
-// settings) will be mounted here as each phase is delivered.
+// Phase 5+ routers (dashboard analytics, reports, documents, settings) will be
+// mounted here as each phase is delivered.
 
 module.exports = router;

@@ -58,8 +58,13 @@ API runs at `http://localhost:5100/api/v1`.
   bank/cash balance updates on create/update/delete (reverse-then-reapply on edits so balances
   never drift), merchant usage stats on expense transactions, and an immutable `AuditLog` recording
   every create/update/delete with a before/after diff.
-- **Phase 4 (next):** Statement import (CSV/XLSX/PDF), duplicate detection, merchant mapping & auto-categorization.
-- **Phase 5:** Dashboard & Analytics endpoints (income/expense/savings, category & merchant breakdowns,
+- **Phase 4 (this delivery): Imports & Merchants** — full Merchant CRUD; a statement-import
+  pipeline (`/imports/preview` → `/imports/confirm`) that parses CSV, XLSX, and PDF bank
+  statements, normalizes varying column names across banks, flags likely duplicates
+  (same account + amount + day), and suggests a merchant + category for each row via
+  substring matching against known merchants/aliases — nothing is written to the database
+  until the user reviews and confirms.
+- **Phase 5 (next):** Dashboard & Analytics endpoints (income/expense/savings, category & merchant breakdowns,
   bank/UPI usage, trends).
 - **Phase 6:** Reports (PDF/Excel/CSV export), Receipt management, Notifications, Settings, Audit logs.
 
@@ -134,6 +139,26 @@ Transfer body: `{ type: "transfer", amount, date, transferFrom: { type: "bank"|"
 | Method | Endpoint       | Description                                          |
 | ------ | --------------- | ------------------------------------------------------- |
 | GET    | `/audit-logs`   | List the user's own audit trail (paginated, `entityType` filter) |
+
+### Merchants (Phase 4)
+| Method | Endpoint        | Description                                     |
+| ------ | ---------------- | -------------------------------------------------- |
+| POST   | `/merchants`     | Create (optionally with a `defaultCategory`)      |
+| GET    | `/merchants`     | List (`search` by name)                           |
+| GET    | `/merchants/:id` | Get one                                           |
+| PATCH  | `/merchants/:id` | Update (name, aliases, defaultCategory)           |
+| DELETE | `/merchants/:id` | Soft delete                                       |
+
+### Statement Import (Phase 4)
+| Method | Endpoint          | Description                                                        |
+| ------ | ------------------ | ---------------------------------------------------------------------- |
+| POST   | `/imports/preview` | Multipart: `file` + `bankAccount`. Parses the statement and returns suggested category/merchant + duplicate flags — **writes nothing to the database** |
+| POST   | `/imports/confirm` | JSON: `{ bankAccount, importBatchId, rows: [...] }`. Creates a real Transaction for every row with `include !== false` and a `category` set |
+
+Supported formats: CSV and XLSX parse column names flexibly (Date/Txn Date, Description/Narration/Particulars,
+Debit/Withdrawal, Credit/Deposit, or a single Amount + Type column all work). PDF parsing is best-effort —
+it works for simple single-line-per-transaction statements; complex multi-column PDF layouts may not parse
+cleanly, in which case exporting as CSV/XLSX from the bank's portal is recommended.
 
 ## Quick Test
 ```
