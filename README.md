@@ -64,9 +64,12 @@ API runs at `http://localhost:5100/api/v1`.
   (same account + amount + day), and suggests a merchant + category for each row via
   substring matching against known merchants/aliases — nothing is written to the database
   until the user reviews and confirms.
-- **Phase 5 (next):** Dashboard & Analytics endpoints (income/expense/savings, category & merchant breakdowns,
-  bank/UPI usage, trends).
-- **Phase 6:** Reports (PDF/Excel/CSV export), Receipt management, Notifications, Settings, Audit logs.
+- **Phase 5 (this delivery): Dashboard & Analytics** — six `/dashboard/*` aggregation endpoints
+  covering every stat and chart from the brief: an all-in-one summary (totals, monthly figures,
+  today's spending, expense ratio, most-used bank/UPI, top category, largest expense/income),
+  a monthly income/expense/cash-flow trend series, category breakdown, payment-method
+  distribution, bank/UPI usage, and a 12-month yearly summary.
+- **Phase 6 (next):** Reports (PDF/Excel/CSV export), Receipt management, Notifications, Settings, Audit logs.
 
 Each phase is delivered complete and working before moving to the next, per your instructions.
 
@@ -159,6 +162,16 @@ Supported formats: CSV and XLSX parse column names flexibly (Date/Txn Date, Desc
 Debit/Withdrawal, Credit/Deposit, or a single Amount + Type column all work). PDF parsing is best-effort —
 it works for simple single-line-per-transaction statements; complex multi-column PDF layouts may not parse
 cleanly, in which case exporting as CSV/XLSX from the bank's portal is recommended.
+
+### Dashboard & Analytics (Phase 5)
+| Method | Endpoint                              | Description                                                 |
+| ------ | -------------------------------------- | --------------------------------------------------------------- |
+| GET    | `/dashboard/summary`                  | Totals, monthly figures, today's spending, expense ratio, most-used bank/UPI, top category, largest expense/income |
+| GET    | `/dashboard/trends?months=6`          | Monthly income/expense/net-flow series (1–24 months)         |
+| GET    | `/dashboard/category-breakdown?type=expense` | Category-wise share of spend or income (`type=income\|expense`, optional `dateFrom`/`dateTo`) |
+| GET    | `/dashboard/payment-method-distribution` | Total + count grouped by payment method                    |
+| GET    | `/dashboard/account-usage`            | Transaction count + volume per bank account and per UPI app  |
+| GET    | `/dashboard/yearly-summary?year=2026` | 12-month income/expense/saving breakdown for a calendar year |
 
 ## Quick Test
 ```
