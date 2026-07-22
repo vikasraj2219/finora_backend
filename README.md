@@ -47,14 +47,18 @@ API runs at `http://localhost:5100/api/v1`.
   ApiError/ApiResponse/catchAsync/pagination utilities, JWT auth (register/login/refresh/me/change-password,
   first user becomes admin), role-based auth middleware, and base Mongoose models for the core domain
   (BankAccount, UpiAccount, Category, Merchant, Transaction) so later phases can build directly on top.
-- **Phase 2 (this delivery): Accounts & Categories** — Bank account CRUD (create/list/update/soft-delete,
+- **Phase 2: Accounts & Categories** — Bank account CRUD (create/list/update/soft-delete,
   toggle active, manual balance adjustment, recalculate-from-transactions), UPI account CRUD (with
   bank-linking + ownership validation), Category CRUD with default categories auto-seeded on registration,
   a per-user Cash ledger (view/adjust/recalculate), and the shared `balance.service.js` that both bank and
   cash balances build on.
-- **Phase 3 (next):** Transactions module — full CRUD, filters/search/pagination, transfers between accounts,
-  soft delete, audit logging.
-- **Phase 4:** Statement import (CSV/XLSX/PDF), duplicate detection, merchant mapping & auto-categorization.
+- **Phase 3 (this delivery): Transactions** — full Transaction CRUD (income/expense/transfer),
+  filtering (type, category, account, payment method, date range, amount range, note search),
+  pagination + sorting, transfers between any combination of bank accounts and cash, automatic
+  bank/cash balance updates on create/update/delete (reverse-then-reapply on edits so balances
+  never drift), merchant usage stats on expense transactions, and an immutable `AuditLog` recording
+  every create/update/delete with a before/after diff.
+- **Phase 4 (next):** Statement import (CSV/XLSX/PDF), duplicate detection, merchant mapping & auto-categorization.
 - **Phase 5:** Dashboard & Analytics endpoints (income/expense/savings, category & merchant breakdowns,
   bank/UPI usage, trends).
 - **Phase 6:** Reports (PDF/Excel/CSV export), Receipt management, Notifications, Settings, Audit logs.
@@ -112,7 +116,24 @@ header: `Authorization: Bearer <accessToken>`
 | ------ | ------------------ | ----------------------------------------------- |
 | GET    | `/cash`             | Get the user's cash-in-hand balance             |
 | PATCH  | `/cash/adjust`      | Adjust balance (`{ amount, note }`, negative to deduct) |
-| POST   | `/cash/recalculate` | Recompute from cash transactions (meaningful from Phase 3) |
+| POST   | `/cash/recalculate` | Recompute from cash transactions                |
+
+### Transactions (Phase 3)
+| Method | Endpoint            | Description                                                |
+| ------ | -------------------- | ------------------------------------------------------------ |
+| POST   | `/transactions`      | Create (income/expense/transfer — see body shapes below)   |
+| GET    | `/transactions`      | List — filters: `type`, `category`, `bankAccount`, `upiAccount`, `paymentMethod`, `dateFrom`, `dateTo`, `minAmount`, `maxAmount`, `search`; paginated, sortable via `sortBy`/`sortDir` |
+| GET    | `/transactions/:id`  | Get one                                                     |
+| PATCH  | `/transactions/:id`  | Update (reverses old balance effect, applies the new one)   |
+| DELETE | `/transactions/:id`  | Soft delete (reverses its balance effect)                   |
+
+Income/expense body: `{ type, amount, date, category, paymentMethod, bankAccount?, upiAccount?, note? }`
+Transfer body: `{ type: "transfer", amount, date, transferFrom: { type: "bank"|"cash", bankAccount? }, transferTo: {...} }`
+
+### Audit Logs (Phase 3, read-only)
+| Method | Endpoint       | Description                                          |
+| ------ | --------------- | ------------------------------------------------------- |
+| GET    | `/audit-logs`   | List the user's own audit trail (paginated, `entityType` filter) |
 
 ## Quick Test
 ```
