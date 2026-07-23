@@ -56,6 +56,27 @@ const softDeleteCategory = async (userId, id) => {
   return category;
 };
 
+// Used by bulk statement import: rather than silently dropping a row the user didn't
+// hand-pick a category for, file it under "Other" / "Other Income" (seeded by default
+// for every user) so nothing is lost — the user can recategorize later from Transactions.
+const getOrCreateFallbackCategory = async (userId, type) => {
+  const fallbackName = type === 'income' ? 'Other Income' : 'Other';
+  let category = await Category.findOne({ user: userId, type, name: fallbackName, isDeleted: false });
+  if (!category) {
+    category = await Category.findOne({ user: userId, type, isDeleted: false }).sort({ createdAt: 1 });
+  }
+  if (!category) {
+    category = await Category.create({
+      user: userId,
+      type,
+      name: 'Uncategorized',
+      icon: 'category',
+      color: '#94A3B8',
+    });
+  }
+  return category;
+};
+
 module.exports = {
   seedDefaultCategories,
   createCategory,
@@ -63,4 +84,5 @@ module.exports = {
   getCategoryById,
   updateCategory,
   softDeleteCategory,
+  getOrCreateFallbackCategory,
 };
