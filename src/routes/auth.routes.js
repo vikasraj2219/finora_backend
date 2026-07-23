@@ -14,6 +14,7 @@ router.post('/register', registerRules, validate, controller.register);
 router.post('/login', loginRules, validate, controller.login);
 router.post('/refresh', controller.refresh);
 router.get('/me', protect, controller.me);
+router.patch('/profile', protect, controller.updateProfile);
 router.patch('/update-password', protect, updatePasswordRules, validate, controller.updatePassword);
 router.post('/logout', protect, controller.logout);
 

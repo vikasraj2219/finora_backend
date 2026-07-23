@@ -69,7 +69,14 @@ API runs at `http://localhost:5100/api/v1`.
   today's spending, expense ratio, most-used bank/UPI, top category, largest expense/income),
   a monthly income/expense/cash-flow trend series, category breakdown, payment-method
   distribution, bank/UPI usage, and a 12-month yearly summary.
-- **Phase 6 (next):** Reports (PDF/Excel/CSV export), Receipt management, Notifications, Settings, Audit logs.
+- **Phase 6 (this delivery, final): Reports, Receipts, Notifications, Settings** — transaction
+  export as CSV/XLSX/PDF plus a one-page financial-summary PDF (`/reports/*`); receipt
+  upload/removal on any transaction, served back from `/uploads`; a `Notification` model with
+  automatic alerts (large expense recorded, bank account gone negative) and full read/unread
+  management (`/notifications/*`); and a profile-update endpoint (`PATCH /auth/profile` for
+  name/currency) alongside the existing password-change route.
+
+All six phases from the original brief are now delivered.
 
 Each phase is delivered complete and working before moving to the next, per your instructions.
 
@@ -172,6 +179,38 @@ cleanly, in which case exporting as CSV/XLSX from the bank's portal is recommend
 | GET    | `/dashboard/payment-method-distribution` | Total + count grouped by payment method                    |
 | GET    | `/dashboard/account-usage`            | Transaction count + volume per bank account and per UPI app  |
 | GET    | `/dashboard/yearly-summary?year=2026` | 12-month income/expense/saving breakdown for a calendar year |
+
+### Reports (Phase 6)
+| Method | Endpoint                                       | Description                                                    |
+| ------ | ------------------------------------------------ | ------------------------------------------------------------------ |
+| GET    | `/reports/transactions/export?format=csv\|xlsx\|pdf` | Downloads matching transactions (same filters as the list endpoint: `type`, `category`, `bankAccount`, `dateFrom`, `dateTo`) |
+| GET    | `/reports/summary/export`                        | Downloads a one-page financial-summary PDF                     |
+
+### Receipts (Phase 6)
+| Method | Endpoint                        | Description                                       |
+| ------ | ---------------------------------- | ----------------------------------------------------- |
+| POST   | `/transactions/:id/receipt`       | Multipart `receipt` file — attaches/replaces the receipt |
+| DELETE | `/transactions/:id/receipt`       | Removes the attached receipt                          |
+
+Uploaded receipts are served back at `http://localhost:5100/uploads/<filename>` (the value returned in
+`receiptUrl`).
+
+### Notifications (Phase 6)
+| Method | Endpoint                     | Description                                              |
+| ------ | ------------------------------ | -------------------------------------------------------------- |
+| GET    | `/notifications`               | List (paginated, `unreadOnly=true` filter), includes `unreadCount` |
+| PATCH  | `/notifications/:id/read`      | Mark one notification as read                              |
+| PATCH  | `/notifications/read-all`      | Mark all as read                                            |
+| DELETE | `/notifications/:id`           | Delete a notification                                       |
+
+Notifications are created automatically: a "Large expense recorded" alert (expenses ≥ 10,000) and
+a "Bank account overdrawn" alert (balance goes negative) — both fire from `transaction.service.js`
+whenever a transaction is created or edited.
+
+### Profile (Phase 6)
+| Method | Endpoint         | Description                              |
+| ------ | ----------------- | -------------------------------------------- |
+| PATCH  | `/auth/profile`   | Update `name` and/or `currency`             |
 
 ## Quick Test
 ```

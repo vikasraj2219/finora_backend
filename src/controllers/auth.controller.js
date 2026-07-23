@@ -128,10 +128,21 @@ const updatePassword = catchAsync(async (req, res) => {
   res.status(200).json(new ApiResponse(200, null, 'Password updated successfully'));
 });
 
+// PATCH /auth/profile
+const updateProfile = catchAsync(async (req, res) => {
+  const { name, currency } = req.body;
+  const user = await User.findById(req.user._id);
+  if (name) user.name = name;
+  if (currency) user.currency = currency;
+  await user.save();
+
+  res.status(200).json(new ApiResponse(200, { user: sanitizeUser(user) }, 'Profile updated'));
+});
+
 // POST /auth/logout
 const logout = catchAsync(async (req, res) => {
   await User.findByIdAndUpdate(req.user._id, { refreshToken: null });
   res.status(200).json(new ApiResponse(200, null, 'Logged out successfully'));
 });
 
-module.exports = { register, login, refresh, me, updatePassword, logout };
+module.exports = { register, login, refresh, me, updatePassword, updateProfile, logout };

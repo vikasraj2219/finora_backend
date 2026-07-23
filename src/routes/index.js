@@ -9,6 +9,8 @@ const auditLogRoutes = require('./auditLog.routes');
 const merchantRoutes = require('./merchant.routes');
 const statementImportRoutes = require('./statementImport.routes');
 const dashboardRoutes = require('./dashboard.routes');
+const notificationRoutes = require('./notification.routes');
+const reportRoutes = require('./report.routes');
 
 const router = express.Router();
 
@@ -22,8 +24,7 @@ router.use('/audit-logs', auditLogRoutes);
 router.use('/merchants', merchantRoutes);
 router.use('/imports', statementImportRoutes);
 router.use('/dashboard', dashboardRoutes);
-
-// Phase 6 routers (reports, documents, settings) will be mounted here as each
-// phase is delivered.
+router.use('/notifications', notificationRoutes);
+router.use('/reports', reportRoutes);
 
 module.exports = router;

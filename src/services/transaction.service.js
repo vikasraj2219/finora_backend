@@ -5,6 +5,9 @@ const Merchant = require('../models/Merchant.model');
 const ApiError = require('../utils/ApiError');
 const { getPaginationParams, buildPaginationMeta } = require('../utils/pagination');
 const { logAction } = require('./audit.service');
+const { createNotification } = require('./notification.service');
+
+const LARGE_EXPENSE_THRESHOLD = 10000;
 
 const assertBankAccountOwnership = async (userId, bankAccountId) => {
   const account = await BankAccount.findOne({ _id: bankAccountId, user: userId, isDeleted: false });
@@ -99,6 +102,31 @@ const updateMerchantStats = async (txn) => {
   });
 };
 
+// Best-effort alerts — a large expense, or a bank account that's gone negative.
+// Failures inside createNotification are already swallowed, so this never throws.
+const maybeNotify = async (userId, txn) => {
+  if (txn.type === 'expense' && txn.amount >= LARGE_EXPENSE_THRESHOLD) {
+    await createNotification(
+      userId,
+      'Large expense recorded',
+      `An expense of ${txn.amount} was recorded${txn.note ? `: ${txn.note}` : ''}.`,
+      'warning'
+    );
+  }
+
+  if (txn.bankAccount) {
+    const account = await BankAccount.findById(txn.bankAccount);
+    if (account && account.currentBalance < 0) {
+      await createNotification(
+        userId,
+        'Bank account overdrawn',
+        `${account.bankName} balance has gone negative (${account.currentBalance}).`,
+        'error'
+      );
+    }
+  }
+};
+
 const createTransaction = async (userId, payload) => {
   const doc = { ...payload, user: userId };
 
@@ -119,6 +147,7 @@ const createTransaction = async (userId, payload) => {
   await applyEffect(userId, txn, 1);
   await updateMerchantStats(txn);
   await logAction(userId, 'created', 'Transaction', txn._id, `${txn.type} of ${txn.amount} recorded`);
+  await maybeNotify(userId, txn);
 
   return txn;
 };
@@ -211,6 +240,7 @@ const updateTransaction = async (userId, id, payload) => {
     before,
     after: txn.toObject(),
   });
+  await maybeNotify(userId, txn);
 
   return txn;
 };
@@ -227,10 +257,30 @@ const softDeleteTransaction = async (userId, id) => {
   return txn;
 };
 
+const uploadReceipt = async (userId, id, fileUrl) => {
+  const txn = await Transaction.findOne({ _id: id, user: userId, isDeleted: false });
+  if (!txn) throw new ApiError(404, 'Transaction not found');
+  txn.receiptUrl = fileUrl;
+  await txn.save();
+  await logAction(userId, 'updated', 'Transaction', txn._id, 'Receipt attached');
+  return txn;
+};
+
+const removeReceipt = async (userId, id) => {
+  const txn = await Transaction.findOne({ _id: id, user: userId, isDeleted: false });
+  if (!txn) throw new ApiError(404, 'Transaction not found');
+  txn.receiptUrl = undefined;
+  await txn.save();
+  await logAction(userId, 'updated', 'Transaction', txn._id, 'Receipt removed');
+  return txn;
+};
+
 module.exports = {
   createTransaction,
   listTransactions,
   getTransactionById,
   updateTransaction,
   softDeleteTransaction,
+  uploadReceipt,
+  removeReceipt,
 };

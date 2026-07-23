@@ -2,6 +2,7 @@ const express = require('express');
 const controller = require('../controllers/transaction.controller');
 const validate = require('../middlewares/validate.middleware');
 const { protect } = require('../middlewares/auth.middleware');
+const upload = require('../middlewares/upload.middleware');
 const { createRules, updateRules, idParamRule } = require('../validators/transaction.validator');
 
 const router = express.Router();
@@ -12,5 +13,7 @@ router.get('/', controller.list);
 router.get('/:id', idParamRule, validate, controller.getOne);
 router.patch('/:id', updateRules, validate, controller.update);
 router.delete('/:id', idParamRule, validate, controller.remove);
+router.post('/:id/receipt', idParamRule, validate, upload.single('receipt'), controller.uploadReceipt);
+router.delete('/:id/receipt', idParamRule, validate, controller.removeReceipt);
 
 module.exports = router;
