@@ -1,14 +1,18 @@
 const CashAccount = require('../models/CashAccount.model');
-const ApiError = require('../utils/ApiError');
 
 // Called once at registration alongside default categories.
 const createCashAccountForUser = async (userId) => {
   return CashAccount.create({ user: userId, currentBalance: 0 });
 };
 
+// Self-healing: a user should always have exactly one CashAccount (created at
+// registration), but older accounts or edge cases can end up without one.
+// Rather than 404ing forever, create it lazily on first access.
 const getCashAccount = async (userId) => {
-  const account = await CashAccount.findOne({ user: userId });
-  if (!account) throw new ApiError(404, 'Cash account not found');
+  let account = await CashAccount.findOne({ user: userId });
+  if (!account) {
+    account = await createCashAccountForUser(userId);
+  }
   return account;
 };
 
