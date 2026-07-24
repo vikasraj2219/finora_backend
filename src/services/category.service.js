@@ -1,29 +1,36 @@
 const Category = require('../models/Category.model');
+const Subcategory = require('../models/Subcategory.model');
 const ApiError = require('../utils/ApiError');
+const { buildDefaultCategories } = require('../utils/categoryTaxonomy');
 
-const DEFAULT_CATEGORIES = [
-  { name: 'Salary', type: 'income', icon: 'work', color: '#146C43' },
-  { name: 'Freelance', type: 'income', icon: 'laptop', color: '#22C55E' },
-  { name: 'Investment Returns', type: 'income', icon: 'trending_up', color: '#3B82F6' },
-  { name: 'Other Income', type: 'income', icon: 'attach_money', color: '#84CC16' },
-  { name: 'Food & Dining', type: 'expense', icon: 'restaurant', color: '#EF4444' },
-  { name: 'Groceries', type: 'expense', icon: 'shopping_cart', color: '#F97316' },
-  { name: 'Transport', type: 'expense', icon: 'directions_car', color: '#F59E0B' },
-  { name: 'Rent', type: 'expense', icon: 'home', color: '#8B5CF6' },
-  { name: 'Utilities & Bills', type: 'expense', icon: 'bolt', color: '#06B6D4' },
-  { name: 'Shopping', type: 'expense', icon: 'shopping_bag', color: '#EC4899' },
-  { name: 'Health', type: 'expense', icon: 'favorite', color: '#DC2626' },
-  { name: 'Entertainment', type: 'expense', icon: 'movie', color: '#7C3AED' },
-  { name: 'Education', type: 'expense', icon: 'school', color: '#2563EB' },
-  { name: 'Other', type: 'expense', icon: 'category', color: '#64748B' },
-];
-
-// Called once at registration so every new user starts with a usable category set.
+// Called once at registration so every new user starts with the full default
+// category/subcategory taxonomy instead of an empty list.
 const seedDefaultCategories = async (userId) => {
-  const docs = DEFAULT_CATEGORIES.map((c) => ({ ...c, user: userId, isDefault: true }));
-  await Category.insertMany(docs, { ordered: false }).catch(() => {
+  const { docs, subcategoriesByKey } = buildDefaultCategories();
+
+  const categoryDocs = docs.map((c) => ({ ...c, user: userId, isDefault: true }));
+  await Category.insertMany(categoryDocs, { ordered: false }).catch(() => {
     // ignore duplicate-key races; safe to no-op since categories are unique per user+name+type
   });
+
+  if (subcategoriesByKey.size === 0) return;
+
+  // Re-fetch to get generated _ids, then seed subcategories against the right parent.
+  const created = await Category.find({ user: userId, isDeleted: false });
+  const byKey = new Map(created.map((c) => [`${c.type}::${c.name.toLowerCase()}`, c]));
+
+  const subDocs = [];
+  for (const [key, names] of subcategoriesByKey.entries()) {
+    const category = byKey.get(key);
+    if (!category) continue;
+    for (const name of names) {
+      subDocs.push({ user: userId, category: category._id, type: category.type, name, isDefault: true });
+    }
+  }
+
+  if (subDocs.length) {
+    await Subcategory.insertMany(subDocs, { ordered: false }).catch(() => {});
+  }
 };
 
 const createCategory = async (userId, payload) => {
@@ -33,7 +40,7 @@ const createCategory = async (userId, payload) => {
 const listCategories = async (userId, query) => {
   const filter = { user: userId, isDeleted: false };
   if (query.type) filter.type = query.type;
-  return Category.find(filter).sort({ name: 1 });
+  return Category.find(filter).sort({ group: 1, name: 1 });
 };
 
 const getCategoryById = async (userId, id) => {
@@ -56,27 +63,6 @@ const softDeleteCategory = async (userId, id) => {
   return category;
 };
 
-// Used by bulk statement import: rather than silently dropping a row the user didn't
-// hand-pick a category for, file it under "Other" / "Other Income" (seeded by default
-// for every user) so nothing is lost — the user can recategorize later from Transactions.
-const getOrCreateFallbackCategory = async (userId, type) => {
-  const fallbackName = type === 'income' ? 'Other Income' : 'Other';
-  let category = await Category.findOne({ user: userId, type, name: fallbackName, isDeleted: false });
-  if (!category) {
-    category = await Category.findOne({ user: userId, type, isDeleted: false }).sort({ createdAt: 1 });
-  }
-  if (!category) {
-    category = await Category.create({
-      user: userId,
-      type,
-      name: 'Uncategorized',
-      icon: 'category',
-      color: '#94A3B8',
-    });
-  }
-  return category;
-};
-
 module.exports = {
   seedDefaultCategories,
   createCategory,
@@ -84,5 +70,4 @@ module.exports = {
   getCategoryById,
   updateCategory,
   softDeleteCategory,
-  getOrCreateFallbackCategory,
 };

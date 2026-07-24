@@ -7,7 +7,6 @@ const { matchMerchant } = require('./merchantMatch.service');
 const { findDuplicateTransaction } = require('./duplicateDetection.service');
 const { createTransaction } = require('./transaction.service');
 const { findOrCreateByName } = require('./merchant.service');
-const { getOrCreateFallbackCategory } = require('./category.service');
 
 const parseFileToRows = (filePath, mimetype) => {
   const buffer = fs.readFileSync(filePath);
@@ -91,19 +90,12 @@ const confirmImport = async (userId, bankAccountId, importBatchId, rows) => {
 
   let created = 0;
   let skipped = 0;
-  let uncategorized = 0;
+  let unallocated = 0;
 
   for (const row of rows) {
     if (row.include === false) {
       skipped += 1;
       continue;
-    }
-
-    let categoryId = row.category;
-    if (!categoryId) {
-      const fallback = await getOrCreateFallbackCategory(userId, row.type);
-      categoryId = fallback._id;
-      uncategorized += 1;
     }
 
     let merchantId = row.merchant || undefined;
@@ -112,21 +104,24 @@ const confirmImport = async (userId, bankAccountId, importBatchId, rows) => {
       merchantId = merchant._id;
     }
 
-    await createTransaction(userId, {
+    const txn = await createTransaction(userId, {
       type: row.type,
       amount: row.amount,
       date: row.date,
-      category: categoryId,
+      category: row.category || undefined,
+      subcategory: row.subcategory || undefined,
       paymentMethod: 'bank',
       bankAccount: bankAccountId,
       merchant: merchantId,
       note: row.description,
       importBatchId,
+      entrySource: 'IMPORTED',
     });
+    if (txn.allocationStatus !== 'FULLY_ALLOCATED') unallocated += 1;
     created += 1;
   }
 
-  return { importBatchId, created, skipped, uncategorized };
+  return { importBatchId, created, skipped, unallocated };
 };
 
 module.exports = { previewImport, confirmImport };

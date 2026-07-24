@@ -6,6 +6,7 @@ const ApiError = require('../utils/ApiError');
 const { getPaginationParams, buildPaginationMeta } = require('../utils/pagination');
 const { logAction } = require('./audit.service');
 const { createNotification } = require('./notification.service');
+const { categoryHasSubcategories } = require('./subcategory.service');
 
 const LARGE_EXPENSE_THRESHOLD = 10000;
 
@@ -19,6 +20,33 @@ const getCashAccount = async (userId) => {
   const account = await CashAccount.findOne({ user: userId });
   if (!account) throw new ApiError(404, 'Cash account not found');
   return account;
+};
+
+// Transfers, adjustments, and opening balances aren't "classified" the way income/expense
+// are (no category/subcategory involved) — they're always considered fully allocated the
+// moment they're created, since there's nothing further for the user to assign.
+const NON_CLASSIFIABLE_TYPES = ['transfer', 'adjustment', 'opening_balance'];
+
+// A subcategory can never be set without its parent category, and a category never
+// without a type (type is always required at the schema level already, so this only
+// needs to check subcategory -> category).
+const validateAllocationHierarchy = (txn) => {
+  if (txn.subcategory && !txn.category) {
+    throw new ApiError(400, 'A subcategory cannot be set without its category');
+  }
+};
+
+// UNALLOCATED: no category yet. PARTIALLY_ALLOCATED: category set but subcategory isn't
+// — unless this category simply has no subcategories to choose from, in which case
+// category alone is as complete as it gets. FULLY_ALLOCATED: category (+ subcategory,
+// where one exists) is set.
+const computeAllocationStatus = async (userId, txn) => {
+  if (NON_CLASSIFIABLE_TYPES.includes(txn.type)) return 'FULLY_ALLOCATED';
+  if (!txn.category) return 'UNALLOCATED';
+  if (txn.subcategory) return 'FULLY_ALLOCATED';
+
+  const hasSubcategories = await categoryHasSubcategories(userId, txn.category);
+  return hasSubcategories ? 'PARTIALLY_ALLOCATED' : 'FULLY_ALLOCATED';
 };
 
 const validateTransferPayload = async (userId, txn) => {
@@ -75,7 +103,17 @@ const applyEffect = async (userId, txn, sign) => {
     return;
   }
 
-  const delta = txn.type === 'income' ? sign * txn.amount : -sign * txn.amount;
+  let delta;
+  if (txn.type === 'income') {
+    delta = sign * txn.amount;
+  } else if (txn.type === 'expense') {
+    delta = -sign * txn.amount;
+  } else if (txn.type === 'adjustment') {
+    delta = (txn.direction === 'decrease' ? -1 : 1) * sign * txn.amount;
+  } else {
+    // opening_balance
+    delta = sign * txn.amount;
+  }
 
   if (txn.bankAccount) {
     const account = await BankAccount.findById(txn.bankAccount);
@@ -129,10 +167,14 @@ const maybeNotify = async (userId, txn) => {
 
 const createTransaction = async (userId, payload) => {
   const doc = { ...payload, user: userId };
+  // allocationStatus is always derived by the backend — never accept it from a client.
+  delete doc.allocationStatus;
+  if (!doc.entrySource) doc.entrySource = 'MANUAL';
 
   if (doc.type === 'transfer') {
     await validateTransferPayload(userId, doc);
     delete doc.category;
+    delete doc.subcategory;
     delete doc.merchant;
     delete doc.paymentMethod;
     delete doc.bankAccount;
@@ -142,6 +184,9 @@ const createTransaction = async (userId, payload) => {
     delete doc.transferFrom;
     delete doc.transferTo;
   }
+
+  validateAllocationHierarchy(doc);
+  doc.allocationStatus = await computeAllocationStatus(userId, doc);
 
   const txn = await Transaction.create(doc);
   await applyEffect(userId, txn, 1);
@@ -158,10 +203,13 @@ const listTransactions = async (userId, query) => {
 
   if (query.type) filter.type = query.type;
   if (query.category) filter.category = query.category;
+  if (query.subcategory) filter.subcategory = query.subcategory;
   if (query.bankAccount) filter.bankAccount = query.bankAccount;
   if (query.upiAccount) filter.upiAccount = query.upiAccount;
   if (query.paymentMethod) filter.paymentMethod = query.paymentMethod;
   if (query.merchant) filter.merchant = query.merchant;
+  if (query.allocationStatus) filter.allocationStatus = query.allocationStatus;
+  if (query.entrySource) filter.entrySource = query.entrySource;
 
   if (query.dateFrom || query.dateTo) {
     filter.date = {};
@@ -181,7 +229,8 @@ const listTransactions = async (userId, query) => {
 
   const [items, totalItems] = await Promise.all([
     Transaction.find(filter)
-      .populate('category', 'name type color icon')
+      .populate('category', 'name type color icon group')
+      .populate('subcategory', 'name icon')
       .populate('merchant', 'name')
       .populate('bankAccount', 'bankName accountNickname')
       .populate('upiAccount', 'provider nickname')
@@ -198,7 +247,8 @@ const listTransactions = async (userId, query) => {
 
 const getTransactionById = async (userId, id) => {
   const txn = await Transaction.findOne({ _id: id, user: userId, isDeleted: false })
-    .populate('category', 'name type color icon')
+    .populate('category', 'name type color icon group')
+      .populate('subcategory', 'name icon')
     .populate('merchant', 'name')
     .populate('bankAccount', 'bankName accountNickname')
     .populate('upiAccount', 'provider nickname')
@@ -218,11 +268,15 @@ const updateTransaction = async (userId, id, payload) => {
   const before = txn.toObject();
   await applyEffect(userId, txn, -1);
 
-  Object.assign(txn, payload);
+  const changes = { ...payload };
+  delete changes.allocationStatus; // always derived, never client-settable
+  delete changes.entrySource; // set once at creation, not editable afterward
+  Object.assign(txn, changes);
 
   if (txn.type === 'transfer') {
     await validateTransferPayload(userId, txn);
     txn.category = undefined;
+    txn.subcategory = undefined;
     txn.merchant = undefined;
     txn.paymentMethod = undefined;
     txn.bankAccount = undefined;
@@ -232,6 +286,9 @@ const updateTransaction = async (userId, id, payload) => {
     txn.transferFrom = undefined;
     txn.transferTo = undefined;
   }
+
+  validateAllocationHierarchy(txn);
+  txn.allocationStatus = await computeAllocationStatus(userId, txn);
 
   await txn.save();
   await applyEffect(userId, txn, 1);

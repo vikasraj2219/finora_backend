@@ -1,0 +1,482 @@
+// Full default category taxonomy. Grouped for display in the category picker, and to
+// keep this list maintainable instead of one flat 250-line array.
+//
+// excludeFromTotals marks groups that move money but aren't true income/expense for P&L:
+// - Loan principal received/repaid (only the interest portion is a real expense)
+// - Investments (they convert cash into another asset, they don't spend it)
+// - Cash withdrawals/deposits between the user's own cash and bank (should really be
+//   recorded as Transfers, but are kept here for anyone who logs them this way anyway)
+const GROUPS = [
+  // ---- Income ----
+  {
+    group: '💰 Salary & Employment',
+    type: 'income',
+    color: '#146C43',
+    icon: 'work',
+    categories: [
+      { name: 'Salary', subcategories: ['Monthly Salary', 'Salary Arrears', 'Bonus', 'Overtime', 'Commission', 'Incentive'] },
+      { name: 'Freelance Income', subcategories: ['Freelance Project', 'Freelance Service'] },
+      { name: 'Consulting Income' },
+      { name: 'Part-Time Income' },
+    ],
+  },
+  {
+    group: '💼 Business',
+    type: 'income',
+    color: '#22C55E',
+    icon: 'business_center',
+    categories: [
+      { name: 'Business Income', subcategories: ['Product Sales', 'Service Income', 'Contract Income', 'Professional Fees'] },
+      { name: 'Business Profit' },
+    ],
+  },
+  {
+    group: '🏦 Financial Income',
+    type: 'income',
+    color: '#3B82F6',
+    icon: 'account_balance',
+    categories: [
+      'Bank Interest',
+      'Fixed Deposit Interest',
+      'Recurring Deposit Interest',
+      'Savings Interest',
+      'Dividend',
+      'Investment Returns',
+      'Capital Gains',
+    ],
+  },
+  {
+    group: '🏠 Property & Assets',
+    type: 'income',
+    color: '#8B5CF6',
+    icon: 'home_work',
+    categories: ['Rental Income', 'Property Income', 'Asset Sale', 'Vehicle Sale', 'Other Asset Sale'],
+  },
+  {
+    group: '💸 Money Received',
+    type: 'income',
+    color: '#94A3B8',
+    icon: 'payments',
+    excludeFromTotals: true, // loans/borrowed money are liabilities, not income
+    categories: [
+      'Loan Received',
+      'Borrowed Money',
+      'Money Received from Family',
+      'Money Received from Friends',
+      'Cash Deposit',
+      'Bank Deposit',
+    ],
+  },
+  {
+    group: '🔄 Returns & Refunds',
+    type: 'income',
+    color: '#06B6D4',
+    icon: 'replay',
+    categories: ['Refund', 'Cashback', 'Tax Refund', 'Insurance Claim', 'Reimbursement', 'Cancelled Order Refund'],
+  },
+  {
+    group: '🎁 Personal',
+    type: 'income',
+    color: '#EC4899',
+    icon: 'card_giftcard',
+    categories: ['Gift Received', 'Festival Gift', 'Prize Money', 'Reward'],
+  },
+  {
+    group: '📦 Other Income',
+    type: 'income',
+    color: '#84CC16',
+    icon: 'attach_money',
+    categories: ['Other Income', 'Miscellaneous Income'],
+  },
+
+  // ---- Expense ----
+  {
+    group: '🍔 Food & Dining',
+    type: 'expense',
+    color: '#EF4444',
+    icon: 'restaurant',
+    categories: [
+      'Restaurants',
+      'Fast Food',
+      'Food Delivery',
+      'Swiggy',
+      'Zomato',
+      'Cafes & Coffee',
+      'Snacks',
+      'Bakery',
+      'Street Food',
+      'Office Meals',
+      'Dining Out',
+    ],
+  },
+  {
+    group: '🛒 Groceries & Household',
+    type: 'expense',
+    color: '#F97316',
+    icon: 'shopping_cart',
+    categories: [
+      'Groceries',
+      'Supermarket',
+      'Vegetables',
+      'Fruits',
+      'Dairy',
+      'Meat & Fish',
+      'Household Supplies',
+      'Cleaning Supplies',
+      'Kitchen Supplies',
+    ],
+  },
+  {
+    group: '🚗 Transportation',
+    type: 'expense',
+    color: '#F59E0B',
+    icon: 'directions_car',
+    categories: [
+      'Fuel',
+      'Petrol',
+      'Diesel',
+      'CNG',
+      'EV Charging',
+      'Public Transport',
+      'Bus',
+      'Train',
+      'Metro',
+      'Auto Rickshaw',
+      'Taxi',
+      'Uber',
+      'Ola',
+      'Parking',
+      'Toll',
+      'Vehicle Maintenance',
+      'Car Service',
+      'Bike Service',
+      'Vehicle Insurance',
+    ],
+  },
+  {
+    group: '🛍️ Shopping',
+    type: 'expense',
+    color: '#EC4899',
+    icon: 'shopping_bag',
+    categories: [
+      'Clothing',
+      'Shoes',
+      'Accessories',
+      'Electronics',
+      'Mobile Phone',
+      'Computer & Laptop',
+      'Home Appliances',
+      'Furniture',
+      'Personal Shopping',
+      'Online Shopping',
+      'Amazon',
+      'Flipkart',
+      'Other Shopping',
+    ],
+  },
+  {
+    group: '🏠 Housing & Rent',
+    type: 'expense',
+    color: '#8B5CF6',
+    icon: 'home',
+    categories: [
+      'House Rent',
+      'Property Rent',
+      'Maintenance',
+      'Society Maintenance',
+      'Property Tax',
+      'Home Repair',
+      'Plumbing',
+      'Electrical Repair',
+      'Painting',
+      'Furniture Repair',
+    ],
+  },
+  {
+    group: '💡 Utilities & Bills',
+    type: 'expense',
+    color: '#06B6D4',
+    icon: 'bolt',
+    categories: [
+      'Electricity',
+      'Water',
+      'Gas',
+      'LPG',
+      'Internet',
+      'Broadband',
+      'Mobile Recharge',
+      'Mobile Bill',
+      'DTH',
+      'Cable TV',
+      'Telephone',
+      'Other Utilities',
+    ],
+  },
+  {
+    group: '📱 Subscriptions',
+    type: 'expense',
+    color: '#7C3AED',
+    icon: 'subscriptions',
+    categories: [
+      'Netflix',
+      'Amazon Prime',
+      'Disney+',
+      'Spotify',
+      'YouTube Premium',
+      'Apple Services',
+      'Google Services',
+      'Cloud Storage',
+      'Software Subscription',
+      'Gaming Subscription',
+      'Other Subscriptions',
+    ],
+  },
+  {
+    group: '🏥 Health & Medical',
+    type: 'expense',
+    color: '#DC2626',
+    icon: 'favorite',
+    categories: [
+      'Doctor',
+      'Hospital',
+      'Medicine',
+      'Pharmacy',
+      'Dental',
+      'Eye Care',
+      'Lab Tests',
+      'Medical Insurance',
+      'Health Checkup',
+      'Medical Equipment',
+      'Other Medical',
+    ],
+  },
+  {
+    group: '🎓 Education',
+    type: 'expense',
+    color: '#2563EB',
+    icon: 'school',
+    categories: [
+      'School Fees',
+      'College Fees',
+      'Tuition',
+      'Coaching',
+      'Online Courses',
+      'Books',
+      'Stationery',
+      'Exam Fees',
+      'Certifications',
+      'Training',
+      'Education Software',
+    ],
+  },
+  {
+    group: '✈️ Travel',
+    type: 'expense',
+    color: '#0EA5E9',
+    icon: 'flight',
+    categories: [
+      'Flights',
+      'Train Tickets',
+      'Bus Tickets',
+      'Hotel',
+      'Airbnb',
+      'Travel Food',
+      'Travel Transport',
+      'Travel Shopping',
+      'Visa',
+      'Travel Insurance',
+      'Vacation',
+      'Other Travel',
+    ],
+  },
+  {
+    group: '🎬 Entertainment',
+    type: 'expense',
+    color: '#7C3AED',
+    icon: 'movie',
+    categories: [
+      'Movies',
+      'Cinema',
+      'Concerts',
+      'Events',
+      'Games',
+      'Gaming',
+      'Sports',
+      'Hobbies',
+      'Music',
+      'Entertainment Subscription',
+      'Other Entertainment',
+    ],
+  },
+  {
+    group: '👨‍👩‍👧 Family & Personal',
+    type: 'expense',
+    color: '#F472B6',
+    icon: 'family_restroom',
+    categories: [
+      'Family',
+      'Parents',
+      'Spouse',
+      'Children',
+      'Relatives',
+      'Personal Care',
+      'Salon',
+      'Haircut',
+      'Beauty',
+      'Cosmetics',
+      'Gifts',
+      'Birthday',
+      'Wedding',
+      'Festival',
+      'Donations',
+      'Charity',
+    ],
+  },
+  {
+    group: '💳 Financial Expenses',
+    type: 'expense',
+    color: '#64748B',
+    icon: 'account_balance_wallet',
+    categories: [
+      'Bank Charges',
+      'ATM Fees',
+      'Transaction Fees',
+      'UPI Charges',
+      'Credit Card Fees',
+      'Loan Interest',
+      'Late Payment Fee',
+      'Penalty',
+      'Service Charges',
+      'Forex Charges',
+    ],
+  },
+  {
+    group: '🏦 Loans & Debt',
+    type: 'expense',
+    color: '#B45309',
+    icon: 'account_balance',
+    excludeFromTotals: true, // principal repayment reduces a liability, it isn't a P&L expense
+    categories: [
+      'Loan Repayment',
+      'Credit Card Payment',
+      'EMI',
+      'Personal Loan',
+      'Home Loan',
+      'Car Loan',
+      'Education Loan',
+      'Borrowed Money Repayment',
+    ],
+  },
+  {
+    group: '📈 Investments',
+    type: 'expense',
+    color: '#0D9488',
+    icon: 'trending_up',
+    excludeFromTotals: true, // builds assets, doesn't spend money
+    categories: [
+      'Stocks',
+      'Mutual Funds',
+      'SIP',
+      'Fixed Deposit',
+      'Recurring Deposit',
+      'Bonds',
+      'Gold',
+      'Digital Gold',
+      'PPF',
+      'NPS',
+      'Insurance Investment',
+      'Cryptocurrency',
+      'Other Investments',
+    ],
+  },
+  {
+    group: '🛡️ Insurance',
+    type: 'expense',
+    color: '#4338CA',
+    icon: 'shield',
+    categories: ['Life Insurance', 'Health Insurance', 'Vehicle Insurance', 'Home Insurance', 'Travel Insurance', 'Other Insurance'],
+  },
+  {
+    group: '🧾 Taxes',
+    type: 'expense',
+    color: '#374151',
+    icon: 'receipt_long',
+    categories: ['Income Tax', 'GST', 'Property Tax', 'Professional Tax', 'TDS', 'Other Taxes'],
+  },
+  {
+    group: '💼 Business Expenses',
+    type: 'expense',
+    color: '#1D4ED8',
+    icon: 'business_center',
+    categories: [
+      'Office Rent',
+      'Office Supplies',
+      'Employee Salary',
+      'Contractor Payment',
+      'Business Travel',
+      'Marketing',
+      'Advertising',
+      'Software',
+      'Hosting',
+      'Domain',
+      'Internet',
+      'Business Utilities',
+      'Professional Fees',
+      'Legal Fees',
+      'Accounting',
+      'Business Equipment',
+      'Other Business Expenses',
+    ],
+  },
+  {
+    group: '💸 Cash & Money Management',
+    type: 'expense',
+    color: '#94A3B8',
+    icon: 'payments',
+    excludeFromTotals: true, // usually a self-transfer, not a real expense
+    categories: ['Cash Withdrawal', 'Cash Deposit', 'ATM Withdrawal'],
+  },
+  {
+    group: '📦 Other Expenses',
+    type: 'expense',
+    color: '#64748B',
+    icon: 'category',
+    categories: ['Miscellaneous', 'Uncategorized', 'Other Expense'],
+  },
+];
+
+// Flattens the grouped taxonomy into insertable category docs (plus their subcategory
+// names, keyed by category name+type so the seeder can look up the parent's _id after
+// categories are inserted). Dedupes names that legitimately appear under more than one
+// group (e.g. "Vehicle Insurance" under both Transportation and Insurance) so the unique
+// (user, name, type) index never trips.
+const buildDefaultCategories = () => {
+  const seen = new Set();
+  const docs = [];
+  const subcategoriesByKey = new Map(); // `${type}::${categoryName.toLowerCase()}` -> [subNames]
+
+  for (const g of GROUPS) {
+    for (const entry of g.categories) {
+      const isObject = typeof entry === 'object';
+      const name = isObject ? entry.name : entry;
+      const key = `${g.type}::${name.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      docs.push({
+        name,
+        type: g.type,
+        group: g.group,
+        icon: g.icon,
+        color: g.color,
+        excludeFromTotals: Boolean(g.excludeFromTotals),
+      });
+      if (isObject && Array.isArray(entry.subcategories) && entry.subcategories.length) {
+        subcategoriesByKey.set(key, entry.subcategories);
+      }
+    }
+  }
+
+  return { docs, subcategoriesByKey };
+};
+
+module.exports = { buildDefaultCategories };
