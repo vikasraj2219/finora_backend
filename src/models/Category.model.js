@@ -4,7 +4,10 @@ const categorySchema = new mongoose.Schema(
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     name: { type: String, required: true, trim: true },
-    type: { type: String, enum: ['income', 'expense'], required: true },
+    // Matches a Type document's `code` (see Type.model.js) rather than a hard-coded
+    // enum — validated against the real Type collection in category.validator.js so
+    // custom category-eligible types can be added without a schema change here.
+    type: { type: String, required: true, trim: true, lowercase: true },
     // Section this category belongs to in the full taxonomy, e.g. "Food & Dining",
     // "Loans & Debt" — used to group the category picker instead of one long flat list.
     group: { type: String, trim: true, default: 'Other' },
