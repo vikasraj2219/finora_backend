@@ -412,6 +412,161 @@ const getAllocationSummary = async (userId) => {
   return { ...counts, total, fullyAllocatedPct };
 };
 
+// A bank account's transactions live in two shapes: income/expense/adjustment/
+// opening_balance carry it in the top-level `bankAccount` field, but transfers carry it
+// in `transferFrom.bankAccount` / `transferTo.bankAccount` instead (createTransaction
+// clears the top-level field for transfers). A bank account's ledger needs both, or
+// money moving in/out via transfer would silently disappear from its own history.
+const buildAccountMatch = (userId, { bankAccount, upiAccount }) => {
+  const uid = new mongoose.Types.ObjectId(userId);
+  if (bankAccount) {
+    const bid = new mongoose.Types.ObjectId(bankAccount);
+    return {
+      user: uid,
+      isDeleted: false,
+      $or: [{ bankAccount: bid }, { 'transferFrom.bankAccount': bid }, { 'transferTo.bankAccount': bid }],
+    };
+  }
+  return { user: uid, isDeleted: false, upiAccount: new mongoose.Types.ObjectId(upiAccount) };
+};
+
+// Spec section 12 — the paginated, filterable ledger for one bank or UPI account.
+const getAccountLedger = async (userId, accountRef, query) => {
+  const { page, limit, skip } = getPaginationParams(query);
+  const match = buildAccountMatch(userId, accountRef);
+  if (query.allocationStatus) match.allocationStatus = query.allocationStatus;
+
+  const [items, totalItems] = await Promise.all([
+    Transaction.find(match)
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('category', 'name type color icon group')
+      .populate('subcategory', 'name icon')
+      .populate('merchant', 'name')
+      .populate('bankAccount', 'bankName accountNickname')
+      .populate('upiAccount', 'provider nickname')
+      .populate('transferFrom.bankAccount', 'bankName accountNickname')
+      .populate('transferTo.bankAccount', 'bankName accountNickname'),
+    Transaction.countDocuments(match),
+  ]);
+
+  return { items, meta: buildPaginationMeta(totalItems, page, limit) };
+};
+
+// Spec section 11/13 — the account detail header (income/expense/transfers + allocation
+// breakdown for one account).
+const getAccountStats = async (userId, accountRef) => {
+  const match = buildAccountMatch(userId, accountRef);
+  const results = await Transaction.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: null,
+        totalTransactions: { $sum: 1 },
+        totalIncome: { $sum: { $cond: [{ $eq: ['$type', 'income'] }, '$amount', 0] } },
+        totalExpense: { $sum: { $cond: [{ $eq: ['$type', 'expense'] }, '$amount', 0] } },
+        totalTransfers: { $sum: { $cond: [{ $eq: ['$type', 'transfer'] }, 1, 0] } },
+        unallocated: { $sum: { $cond: [{ $eq: ['$allocationStatus', 'UNALLOCATED'] }, 1, 0] } },
+        partiallyAllocated: { $sum: { $cond: [{ $eq: ['$allocationStatus', 'PARTIALLY_ALLOCATED'] }, 1, 0] } },
+        fullyAllocated: { $sum: { $cond: [{ $eq: ['$allocationStatus', 'FULLY_ALLOCATED'] }, 1, 0] } },
+      },
+    },
+  ]);
+
+  const stats = results[0] || {
+    totalTransactions: 0,
+    totalIncome: 0,
+    totalExpense: 0,
+    totalTransfers: 0,
+    unallocated: 0,
+    partiallyAllocated: 0,
+    fullyAllocated: 0,
+  };
+  delete stats._id;
+  return stats;
+};
+
+// Spec sections 11/13/15 — the lightweight per-account counts shown on the account list
+// cards ("320 Transactions, 25 Unallocated..."). Deliberately keyed off the top-level
+// bankAccount/upiAccount field only (not the $or used by the full ledger above): folding
+// in transfers here would mean each transfer counts against two different account cards
+// at once, which would make the numbers on the list page harder to reconcile than they're
+// worth for a summary badge. The drill-down ledger (getAccountLedger) still shows transfers.
+const getAccountsAllocationSummary = async (userId) => {
+  const uid = new mongoose.Types.ObjectId(userId);
+
+  const aggregateBy = async (field) => {
+    const results = await Transaction.aggregate([
+      { $match: { user: uid, isDeleted: false, [field]: { $ne: null } } },
+      {
+        $group: {
+          _id: `$${field}`,
+          totalTransactions: { $sum: 1 },
+          unallocated: { $sum: { $cond: [{ $eq: ['$allocationStatus', 'UNALLOCATED'] }, 1, 0] } },
+          partiallyAllocated: { $sum: { $cond: [{ $eq: ['$allocationStatus', 'PARTIALLY_ALLOCATED'] }, 1, 0] } },
+          fullyAllocated: { $sum: { $cond: [{ $eq: ['$allocationStatus', 'FULLY_ALLOCATED'] }, 1, 0] } },
+        },
+      },
+    ]);
+    const map = {};
+    results.forEach((r) => {
+      map[r._id.toString()] = {
+        totalTransactions: r.totalTransactions,
+        unallocated: r.unallocated,
+        partiallyAllocated: r.partiallyAllocated,
+        fullyAllocated: r.fullyAllocated,
+      };
+    });
+    return map;
+  };
+
+  const [bank, upi] = await Promise.all([aggregateBy('bankAccount'), aggregateBy('upiAccount')]);
+  return { bank, upi };
+};
+
+// Spec section 19 chart "Allocation Trend Over Time" / "Allocation Status by Month" —
+// monthly counts per allocationStatus for the last N months.
+const getAllocationTrend = async (userId, months = 6) => {
+  const since = new Date();
+  since.setMonth(since.getMonth() - (months - 1));
+  since.setDate(1);
+  since.setHours(0, 0, 0, 0);
+
+  const results = await Transaction.aggregate([
+    { $match: { user: new mongoose.Types.ObjectId(userId), isDeleted: false, date: { $gte: since } } },
+    {
+      $group: {
+        _id: { month: { $dateToString: { format: '%Y-%m', date: '$date' } }, status: '$allocationStatus' },
+        count: { $sum: 1 },
+      },
+    },
+    { $sort: { '_id.month': 1 } },
+  ]);
+
+  const byMonth = {};
+  results.forEach((r) => {
+    const month = r._id.month;
+    if (!byMonth[month]) byMonth[month] = { month, UNALLOCATED: 0, PARTIALLY_ALLOCATED: 0, FULLY_ALLOCATED: 0 };
+    byMonth[month][r._id.status] = r.count;
+  });
+
+  return Object.values(byMonth);
+};
+
+// Spec section 19 chart "Imported vs Manual Transactions".
+const getEntrySourceSummary = async (userId) => {
+  const results = await Transaction.aggregate([
+    { $match: { user: new mongoose.Types.ObjectId(userId), isDeleted: false } },
+    { $group: { _id: '$entrySource', count: { $sum: 1 } } },
+  ]);
+  const counts = { IMPORTED: 0, MANUAL: 0 };
+  results.forEach((r) => {
+    counts[r._id] = r.count;
+  });
+  return counts;
+};
+
 module.exports = {
   createTransaction,
   listTransactions,
@@ -422,4 +577,9 @@ module.exports = {
   removeReceipt,
   bulkAllocate,
   getAllocationSummary,
+  getAccountLedger,
+  getAccountStats,
+  getAccountsAllocationSummary,
+  getAllocationTrend,
+  getEntrySourceSummary,
 };

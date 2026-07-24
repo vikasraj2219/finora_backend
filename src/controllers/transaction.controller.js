@@ -50,6 +50,36 @@ const allocationSummary = catchAsync(async (req, res) => {
   res.status(200).json(new ApiResponse(200, summary));
 });
 
+const accountLedger = catchAsync(async (req, res) => {
+  const { bankAccount, upiAccount } = req.query;
+  if (!bankAccount && !upiAccount) throw new ApiError(400, 'bankAccount or upiAccount is required');
+  const { items, meta } = await service.getAccountLedger(req.user._id, { bankAccount, upiAccount }, req.query);
+  res.status(200).json(new ApiResponse(200, { items, meta }));
+});
+
+const accountStats = catchAsync(async (req, res) => {
+  const { bankAccount, upiAccount } = req.query;
+  if (!bankAccount && !upiAccount) throw new ApiError(400, 'bankAccount or upiAccount is required');
+  const stats = await service.getAccountStats(req.user._id, { bankAccount, upiAccount });
+  res.status(200).json(new ApiResponse(200, stats));
+});
+
+const accountsAllocationSummary = catchAsync(async (req, res) => {
+  const summary = await service.getAccountsAllocationSummary(req.user._id);
+  res.status(200).json(new ApiResponse(200, summary));
+});
+
+const allocationTrend = catchAsync(async (req, res) => {
+  const months = req.query.months ? parseInt(req.query.months, 10) : 6;
+  const trend = await service.getAllocationTrend(req.user._id, months);
+  res.status(200).json(new ApiResponse(200, trend));
+});
+
+const entrySourceSummary = catchAsync(async (req, res) => {
+  const summary = await service.getEntrySourceSummary(req.user._id);
+  res.status(200).json(new ApiResponse(200, summary));
+});
+
 module.exports = {
   create,
   list,
@@ -60,4 +90,9 @@ module.exports = {
   removeReceipt,
   bulkAllocate,
   allocationSummary,
+  accountLedger,
+  accountStats,
+  accountsAllocationSummary,
+  allocationTrend,
+  entrySourceSummary,
 };
