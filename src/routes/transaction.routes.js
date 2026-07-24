@@ -3,13 +3,15 @@ const controller = require('../controllers/transaction.controller');
 const validate = require('../middlewares/validate.middleware');
 const { protect } = require('../middlewares/auth.middleware');
 const upload = require('../middlewares/upload.middleware');
-const { createRules, updateRules, idParamRule } = require('../validators/transaction.validator');
+const { createRules, updateRules, idParamRule, bulkAllocateRules } = require('../validators/transaction.validator');
 
 const router = express.Router();
 router.use(protect);
 
 router.post('/', createRules, validate, controller.create);
 router.get('/', controller.list);
+router.get('/allocation-summary', controller.allocationSummary);
+router.post('/bulk-allocate', bulkAllocateRules, validate, controller.bulkAllocate);
 router.get('/:id', idParamRule, validate, controller.getOne);
 router.patch('/:id', updateRules, validate, controller.update);
 router.delete('/:id', idParamRule, validate, controller.remove);

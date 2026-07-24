@@ -1,7 +1,10 @@
+const mongoose = require('mongoose');
 const Transaction = require('../models/Transaction.model');
 const BankAccount = require('../models/BankAccount.model');
 const CashAccount = require('../models/CashAccount.model');
 const Merchant = require('../models/Merchant.model');
+const Category = require('../models/Category.model');
+const Subcategory = require('../models/Subcategory.model');
 const ApiError = require('../utils/ApiError');
 const { getPaginationParams, buildPaginationMeta } = require('../utils/pagination');
 const { logAction } = require('./audit.service');
@@ -332,6 +335,83 @@ const removeReceipt = async (userId, id) => {
   return txn;
 };
 
+// Applies one Type→Category→Subcategory assignment across many transactions at once
+// (spec section 20). Category is required (there'd be nothing to bulk-set otherwise);
+// subcategory is optional. Transactions whose own type doesn't match the category's
+// type, or that aren't classifiable at all (transfer/adjustment/opening_balance), are
+// left untouched and reported back rather than silently miscategorized. Category
+// changes don't affect any account balance, so this skips the applyEffect dance that
+// updateTransaction does.
+const bulkAllocate = async (userId, { transactionIds, category, subcategory }) => {
+  if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
+    throw new ApiError(400, 'transactionIds is required');
+  }
+  if (!category) {
+    throw new ApiError(400, 'category is required for bulk allocation');
+  }
+
+  const categoryDoc = await Category.findOne({ _id: category, user: userId, isDeleted: false });
+  if (!categoryDoc) throw new ApiError(400, 'Category not found');
+
+  let subcategoryDoc = null;
+  if (subcategory) {
+    subcategoryDoc = await Subcategory.findOne({
+      _id: subcategory,
+      user: userId,
+      category: categoryDoc._id,
+      isDeleted: false,
+    });
+    if (!subcategoryDoc) throw new ApiError(400, 'Subcategory not found for this category');
+  }
+
+  const txns = await Transaction.find({ _id: { $in: transactionIds }, user: userId, isDeleted: false });
+
+  let updated = 0;
+  const skipped = [];
+
+  for (const txn of txns) {
+    if (NON_CLASSIFIABLE_TYPES.includes(txn.type)) {
+      skipped.push({ id: txn._id, reason: `${txn.type} transactions aren't classifiable` });
+      continue;
+    }
+    if (categoryDoc.type !== txn.type) {
+      skipped.push({ id: txn._id, reason: `Category is ${categoryDoc.type}, transaction is ${txn.type}` });
+      continue;
+    }
+
+    txn.category = categoryDoc._id;
+    txn.subcategory = subcategoryDoc ? subcategoryDoc._id : undefined;
+    txn.allocationStatus = await computeAllocationStatus(userId, txn);
+    await txn.save();
+    updated += 1;
+  }
+
+  const notFoundCount = transactionIds.length - txns.length;
+  if (notFoundCount > 0) {
+    skipped.push({ id: null, reason: `${notFoundCount} id(s) not found or not owned by you` });
+  }
+
+  return { updated, skippedCount: skipped.length, skipped, total: transactionIds.length };
+};
+
+// Powers the allocation progress bar / dashboard counts (spec section 19).
+const getAllocationSummary = async (userId) => {
+  const results = await Transaction.aggregate([
+    { $match: { user: new mongoose.Types.ObjectId(userId), isDeleted: false } },
+    { $group: { _id: '$allocationStatus', count: { $sum: 1 } } },
+  ]);
+
+  const counts = { UNALLOCATED: 0, PARTIALLY_ALLOCATED: 0, FULLY_ALLOCATED: 0 };
+  results.forEach((r) => {
+    counts[r._id] = r.count;
+  });
+
+  const total = counts.UNALLOCATED + counts.PARTIALLY_ALLOCATED + counts.FULLY_ALLOCATED;
+  const fullyAllocatedPct = total ? Math.round((counts.FULLY_ALLOCATED / total) * 100) : 100;
+
+  return { ...counts, total, fullyAllocatedPct };
+};
+
 module.exports = {
   createTransaction,
   listTransactions,
@@ -340,4 +420,6 @@ module.exports = {
   softDeleteTransaction,
   uploadReceipt,
   removeReceipt,
+  bulkAllocate,
+  getAllocationSummary,
 };

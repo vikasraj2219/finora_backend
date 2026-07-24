@@ -40,4 +40,24 @@ const removeReceipt = catchAsync(async (req, res) => {
   res.status(200).json(new ApiResponse(200, txn, 'Receipt removed'));
 });
 
-module.exports = { create, list, getOne, update, remove, uploadReceipt, removeReceipt };
+const bulkAllocate = catchAsync(async (req, res) => {
+  const result = await service.bulkAllocate(req.user._id, req.body);
+  res.status(200).json(new ApiResponse(200, result, `${result.updated} transaction(s) allocated`));
+});
+
+const allocationSummary = catchAsync(async (req, res) => {
+  const summary = await service.getAllocationSummary(req.user._id);
+  res.status(200).json(new ApiResponse(200, summary));
+});
+
+module.exports = {
+  create,
+  list,
+  getOne,
+  update,
+  remove,
+  uploadReceipt,
+  removeReceipt,
+  bulkAllocate,
+  allocationSummary,
+};

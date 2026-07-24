@@ -52,4 +52,11 @@ const updateRules = [
 
 const idParamRule = [param('id').isMongoId().withMessage('Invalid transaction id')];
 
-module.exports = { createRules, updateRules, idParamRule };
+const bulkAllocateRules = [
+  body('transactionIds').isArray({ min: 1 }).withMessage('transactionIds must be a non-empty array'),
+  body('transactionIds.*').isMongoId().withMessage('Invalid transaction id in transactionIds'),
+  body('category').isMongoId().withMessage('category is required'),
+  body('subcategory').optional().isMongoId().withMessage('Invalid subcategory id'),
+];
+
+module.exports = { createRules, updateRules, idParamRule, bulkAllocateRules };
